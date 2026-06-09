@@ -1,9 +1,7 @@
-name: Build Cross-Platform Executables
+name: Build and Release Cross-Platform Executables
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
@@ -72,3 +70,71 @@ jobs:
       with:
         name: ImageEditor-macos
         path: dist/ImageEditor
+
+  release:
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download Linux artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ImageEditor-linux
+        path: artifacts/linux
+
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ImageEditor-windows
+        path: artifacts/windows
+
+    - name: Download macOS artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ImageEditor-macos
+        path: artifacts/macos
+
+    - name: Generate Release Notes
+      id: release_notes
+      run: |
+        VERSION="v0.1.0-build.${{ github.run_number }}"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        {
+          echo "## What's New"
+          echo ""
+          git log --pretty=format:"- %s (%h)" --no-merges -10 || echo "- See commit history for details"
+          echo ""
+          echo "## Downloads"
+          echo ""
+          echo "| Platform | File |"
+          echo "|----------|------|"
+          echo "| Linux | \`ImageEditor\` |"
+          echo "| Windows | \`ImageEditor.exe\` |"
+          echo "| macOS | \`ImageEditor\` |"
+          echo ""
+          echo "## SHA256 Checksums"
+          echo '```'
+          sha256sum artifacts/linux/ImageEditor artifacts/windows/ImageEditor.exe artifacts/macos/ImageEditor || true
+          echo '```'
+        } > release_notes.md
+        cat release_notes.md
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.release_notes.outputs.version }}
+        name: Release ${{ steps.release_notes.outputs.version }}
+        body_path: release_notes.md
+        files: |
+          artifacts/linux/ImageEditor
+          artifacts/windows/ImageEditor.exe
+          artifacts/macos/ImageEditor
+        generate_release_notes: true
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
