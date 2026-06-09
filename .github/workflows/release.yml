@@ -1,9 +1,15 @@
-name: Build and Release Cross-Platform Executables
+name: Release
 
 on:
   push:
-    branches: [ main, master ]
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v0.1.0'
 
 jobs:
   build-linux:
@@ -81,6 +87,17 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${{ github.ref_name }}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Releasing $VERSION"
+
     - name: Download Linux artifact
       uses: actions/download-artifact@v4
       with:
@@ -99,15 +116,25 @@ jobs:
         name: ImageEditor-macos
         path: artifacts/macos
 
+    - name: Make Linux/macOS executables executable
+      run: |
+        chmod +x artifacts/linux/ImageEditor
+        chmod +x artifacts/macos/ImageEditor
+
     - name: Generate Release Notes
       id: release_notes
       run: |
-        VERSION="v0.1.0-build.${{ github.run_number }}"
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        VERSION="${{ steps.version.outputs.version }}"
         {
           echo "## What's New"
           echo ""
-          git log --pretty=format:"- %s (%h)" --no-merges -10 || echo "- See commit history for details"
+          # Get commits since last tag, or last 10 if no previous tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            git log --pretty=format:"- %s (%h)" "$LAST_TAG..HEAD" --no-merges || echo "- See commit history for details"
+          else
+            git log --pretty=format:"- %s (%h)" --no-merges -10 || echo "- See commit history for details"
+          fi
           echo ""
           echo "## Downloads"
           echo ""
@@ -121,20 +148,25 @@ jobs:
           echo '```'
           sha256sum artifacts/linux/ImageEditor artifacts/windows/ImageEditor.exe artifacts/macos/ImageEditor || true
           echo '```'
+          echo ""
+          echo "## Installation"
+          echo ""
+          echo "**Linux/macOS:** Download the executable, make it runnable with \`chmod +x ImageEditor\`, then run \`./ImageEditor\`."
+          echo ""
+          echo "**Windows:** Download \`ImageEditor.exe\` and double-click to run."
         } > release_notes.md
         cat release_notes.md
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.release_notes.outputs.version }}
-        name: Release ${{ steps.release_notes.outputs.version }}
+        tag_name: ${{ steps.version.outputs.version }}
+        name: ${{ steps.version.outputs.version }}
         body_path: release_notes.md
         files: |
           artifacts/linux/ImageEditor
           artifacts/windows/ImageEditor.exe
           artifacts/macos/ImageEditor
-        generate_release_notes: true
-        prerelease: false
+        generate_release_notes: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

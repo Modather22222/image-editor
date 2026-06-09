@@ -20,5 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 20-step undo history using Command Pattern
 - Keyboard shortcuts (Ctrl+O, Ctrl+S, Ctrl+Z, +, -, etc.)
 - Cross-platform executable builds via PyInstaller
-- GitHub Actions CI for automated Windows, macOS, and Linux builds
-- Automated GitHub Releases with platform artifacts
+- GitHub Actions CI/CD for automated Windows, macOS, and Linux builds
+- Automated GitHub Releases triggered by version tags
+- Unit tests for image processor and history manager
